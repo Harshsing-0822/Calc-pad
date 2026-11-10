@@ -16,6 +16,7 @@ function init() {
       saved boolean not null default false
     )`;
     await sql`create table if not exists tape_fails (at timestamptz not null default now())`;
+    await sql`create table if not exists tape_lock (id int primary key default 1 check (id = 1), hash text not null, created_at timestamptz not null default now())`;
   })().catch(e => { ready = undefined; throw e; });
   return ready;
 }
@@ -34,8 +35,19 @@ export async function guard(req, res) {
   if (n >= 30) { res.status(404).end(); return false; }
 
   const token = String(req.headers['x-k'] || '');
-  const expected = String(process.env.ACCESS_HASH || '').trim().toLowerCase();
   const got = crypto.createHash('sha256').update(token).digest('hex');
+
+  // The code is set by whoever unlocks FIRST after deploying (that's you, right after setup).
+  // An ACCESS_HASH env var, if set, overrides this.
+  let expected = String(process.env.ACCESS_HASH || '').trim().toLowerCase();
+  if (!expected) {
+    let [lock] = await sql`select hash from tape_lock where id = 1`;
+    if (!lock && /^[0-9a-f]{64}$/.test(token)) {
+      await sql`insert into tape_lock (id, hash) values (1, ${got}) on conflict (id) do nothing`;
+      [lock] = await sql`select hash from tape_lock where id = 1`;
+    }
+    expected = lock ? lock.hash : '';
+  }
   const ok = /^[0-9a-f]{64}$/.test(expected) && crypto.timingSafeEqual(Buffer.from(got), Buffer.from(expected));
 
   if (!ok) {
