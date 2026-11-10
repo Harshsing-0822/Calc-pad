@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#000000">
+<title>Calculator</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23333'/%3E%3Ccircle cx='46' cy='46' r='9' fill='%23ff9f0a'/%3E%3Crect x='12' y='12' width='40' height='14' rx='3' fill='%23a5a5a5'/%3E%3Ccircle cx='18' cy='46' r='9' fill='%23a5a5a5'/%3E%3C/svg%3E">
+<style>
+  :root { --bg:#000; --key:#333; --key2:#a5a5a5; --op:#ff9f0a; --paper:#f7f2e4; --ink:#2b2a27; --faint:#8c8678; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; background:var(--bg); overscroll-behavior:none; }
+  body { font-family:-apple-system, "SF Pro Display", "Segoe UI", Roboto, sans-serif; color:#fff; -webkit-user-select:none; user-select:none; }
+  .hidden { display:none !important; }
+
+  /* ---------------- calculator ---------------- */
+  #calc { height:100dvh; max-width:440px; margin:0 auto; display:flex; flex-direction:column; justify-content:flex-end; padding:0 16px max(20px, env(safe-area-inset-bottom)); }
+  #expr { text-align:right; color:#8e8e93; font-size:24px; min-height:30px; padding:0 8px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; direction:rtl; }
+  #display { text-align:right; font-size:86px; font-weight:300; line-height:1.05; padding:0 8px 14px; white-space:nowrap; overflow:hidden; }
+  .keys { display:grid; grid-template-columns:repeat(4, 1fr); gap:13px; }
+  .keys button { aspect-ratio:1; border:0; border-radius:50%; background:var(--key); color:#fff; font-size:34px; font-family:inherit; cursor:pointer; transition:filter .12s; }
+  .keys button:active { filter:brightness(1.45); }
+  .keys .fn { background:var(--key2); color:#000; font-size:28px; }
+  .keys .op { background:var(--op); font-size:40px; }
+  .keys .op.on { background:#fff; color:var(--op); }
+  .keys .zero { grid-column:span 2; aspect-ratio:auto; border-radius:999px; text-align:left; padding-left:32px; }
+
+  /* ---------------- history tape (the secret part) ---------------- */
+  #tape { height:100dvh; display:flex; flex-direction:column; background:#1c1c1e; }
+  #tape header { display:flex; align-items:center; justify-content:space-between; padding:max(12px, env(safe-area-inset-top)) 14px 10px; color:#fff; }
+  #tape header button { background:none; border:0; color:var(--op); font-size:17px; font-family:inherit; cursor:pointer; padding:6px 0; }
+  #tape header h1 { font-size:17px; font-weight:600; margin:0; }
+  #roll { flex:1; overflow-y:auto; margin:0 auto; width:100%; max-width:520px; padding:0 14px; -webkit-user-select:text; user-select:text; }
+  .paper { background:var(--paper); color:var(--ink); min-height:100%; padding:18px 18px 28px; font-family:"SF Mono", ui-monospace, Menlo, Consolas, "Courier New", monospace; font-size:15px; position:relative;
+           -webkit-mask: radial-gradient(circle 6px at 50% 0, #0000 98%, #000) 50% 0/14px 100% repeat-x; mask: radial-gradient(circle 6px at 50% 0, #0000 98%, #000) 50% 0/14px 100% repeat-x; }
+  .paper .stamp { text-align:center; color:var(--faint); font-size:11px; letter-spacing:2px; margin:4px 0 14px; }
+  .entry { padding:10px 0; border-bottom:1px dashed #cfc7b2; cursor:pointer; }
+  .entry .meta { display:flex; justify-content:space-between; color:var(--faint); font-size:11px; margin-bottom:4px; }
+  .entry .txt { white-space:pre-wrap; word-wrap:break-word; line-height:1.45; }
+  .entry.mine .txt { text-align:right; }
+  .entry.mine .meta { flex-direction:row-reverse; }
+  .entry.fresh .txt { font-weight:700; }
+  .entry.fresh .meta::after { content:"●"; color:#d9480f; }
+  .entry .acts { display:none; gap:8px; margin-top:8px; }
+  .entry.mine .acts { justify-content:flex-end; }
+  .entry.open .acts { display:flex; }
+  .acts button { font:inherit; font-size:12px; border:1px solid var(--ink); background:transparent; color:var(--ink); padding:5px 10px; border-radius:3px; cursor:pointer; }
+  .acts button.danger { border-color:#b3261e; color:#b3261e; }
+  .older { display:block; margin:0 auto 14px; font:inherit; font-size:12px; color:var(--faint); background:none; border:1px dashed var(--faint); padding:6px 14px; border-radius:3px; cursor:pointer; }
+  .empty { color:var(--faint); text-align:center; padding:40px 0; font-size:13px; }
+  .total { border-top:2px solid var(--ink); margin-top:10px; padding-top:6px; display:flex; justify-content:space-between; font-size:12px; color:var(--faint); }
+
+  #composer { display:flex; gap:10px; padding:10px 14px max(12px, env(safe-area-inset-bottom)); max-width:520px; margin:0 auto; width:100%; align-items:flex-end; }
+  #note { flex:1; resize:none; border:0; border-radius:20px; padding:10px 16px; font:16px/1.35 -apple-system, "Segoe UI", Roboto, sans-serif; background:#2c2c2e; color:#fff; max-height:120px; outline:none; -webkit-user-select:text; user-select:text; }
+  #send { width:42px; height:42px; border-radius:50%; border:0; background:var(--op); color:#fff; font-size:26px; cursor:pointer; flex:none; }
+  #send:disabled { opacity:.4; }
+
+  /* who-am-i picker */
+  #who { position:fixed; inset:0; background:rgba(0,0,0,.85); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:22px; z-index:5; }
+  #who p { color:#8e8e93; margin:0; font-size:15px; }
+  #who div { display:flex; gap:22px; }
+  #who button { width:96px; height:96px; border-radius:50%; border:0; background:var(--key); font-size:44px; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<!-- ========== What everyone sees: a normal, working calculator ========== -->
+<main id="calc">
+  <div id="expr"></div>
+  <div id="display">0</div>
+  <div class="keys">
+    <button class="fn" data-k="AC">AC</button>
+    <button class="fn" data-k="±">±</button>
+    <button class="fn" data-k="%">%</button>
+    <button class="op" data-k="/">÷</button>
+    <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+    <button class="op" data-k="*">×</button>
+    <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+    <button class="op" data-k="-">−</button>
+    <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+    <button class="op" data-k="+">+</button>
+    <button class="zero" data-k="0">0</button>
+    <button data-k=".">.</button>
+    <button class="op" data-k="=">=</button>
+  </div>
+</main>
+
+<!-- ========== The secret part, disguised as the calculator's "History" tape ========== -->
+<section id="tape" class="hidden">
+  <header>
+    <button id="back">‹ Calculator</button>
+    <h1>History</h1>
+    <span style="width:90px"></span>
+  </header>
+  <div id="roll"><div class="paper" id="paper"></div></div>
+  <div id="composer">
+    <textarea id="note" rows="1" placeholder="Add note…" autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false"></textarea>
+    <button id="send" aria-label="Add">=</button>
+  </div>
+</section>
+
+<div id="who" class="hidden">
+  <p>Profile</p>
+  <div><button data-who="A"></button><button data-who="B"></button></div>
+</div>
+
+<script>
+/* =====================================================================
+   SETTINGS — change these if you like
+   ===================================================================== */
+const PEOPLE = { A: '🌙', B: '🌻' };   // one emoji each. You pick one, she picks the other.
+const IDLE_LOCK_MS = 3 * 60 * 1000;     // lock after 3 min without touching the screen
+const POLL_MS = 4000;                   // check for new notes every 4 s while open
+
+/* Don't change these after you've run the setup script (the code would stop working). */
+const SALT = 'tape-v1-rjbiIgRJpVlg-lHA';
+const ITER = 400000;
+
+/* =====================================================================
+   Calculator (fully working, so nobody suspects anything)
+   ===================================================================== */
+const $ = s => document.querySelector(s);
+const disp = $('#display'), exprEl = $('#expr');
+let expr = '', justEvaluated = false;
+
+const pretty = s => s.replace(/\*/g, '×').replace(/\//g, '÷').replace(/-/g, '−');
+function fit(){ const n = disp.textContent.length; disp.style.fontSize = n > 12 ? '44px' : n > 9 ? '60px' : n > 6 ? '74px' : '86px'; }
+function show(){
+  const m = expr.replace(/[+\-*/]$/, '').match(/(?:(?<=^|[ +*/])-)?[\d.]+$/);
+  disp.textContent = pretty(m ? m[0] : '0');
+  exprEl.textContent = pretty(expr.replace(/ /g, ''));
+  fit();
+}
+function evaluate(s){
+  s = s.replace(/[+\-*/.]+$/, '');
+  if (!s || !/^[\d+\-*/.() ]+$/.test(s)) return '0';
+  try {
+    const v = Function('"use strict";return (' + s + ')')();
+    if (!isFinite(v)) return 'Error';
+    return String(parseFloat(v.toPrecision(12)));
+  } catch { return 'Error'; }
+}
+function press(k){
+  bumpIdle();
+  if (/\d/.test(k)) {
+    if (justEvaluated) expr = '';
+    justEvaluated = false;
+    const last = (expr.match(/[\d.]+$/) || [''])[0];
+    if (last === '0') expr = expr.slice(0, -1);
+    expr += k;
+  } else if (k === '.') {
+    if (justEvaluated) expr = '';
+    justEvaluated = false;
+    const last = (expr.match(/[\d.]+$/) || [''])[0];
+    if (!last.includes('.')) expr += last ? '.' : '0.';
+  } else if ('+-*/'.includes(k)) {
+    justEvaluated = false;
+    if (!expr) expr = '0';
+    expr = expr.replace(/[+\-*/]$/, '') + k;
+  } else if (k === 'AC') {
+    expr = ''; justEvaluated = false;
+  } else if (k === '±') {
+    const m = expr.match(/(^|[+\-*/] ?)(-?)([\d.]+)$/);
+    if (m) expr = expr.slice(0, m.index) + (m[2] ? m[1] : m[1] ? m[1].trim() + ' -' : '-') + m[3];
+  } else if (k === '%') {
+    const m = expr.match(/[\d.]+$/);
+    if (m) expr = expr.slice(0, -m[0].length) + String(parseFloat((parseFloat(m[0]) / 100).toPrecision(12)));
+  } else if (k === '=') {
+    const typed = expr;
+    const r = evaluate(expr);
+    exprEl.textContent = pretty(typed) + (typed && typed !== r ? ' =' : '');
+    expr = r === 'Error' ? '' : r; justEvaluated = true;
+    disp.textContent = r; fit();
+    document.querySelectorAll('.op').forEach(b => b.classList.remove('on'));
+    if (/^\d{8,}$/.test(typed)) tryUnlock(typed);   // the secret door
+    return;
+  } else if (k === 'Backspace') {
+    expr = expr.slice(0, -1);
+  }
+  document.querySelectorAll('.op').forEach(b => b.classList.toggle('on', b.dataset.k === k && '+-*/'.includes(k)));
+  show();
+}
+document.querySelectorAll('.keys button').forEach(b => b.addEventListener('click', () => press(b.dataset.k)));
+document.addEventListener('keydown', e => {
+  if (!$('#calc').classList.contains('hidden')) {
+    const map = { Enter: '=', Escape: 'AC', x: '*', X: '*' };
+    const k = map[e.key] || e.key;
+    if (/^[\d.+\-*/=]$/.test(k) || k === 'AC' || k === 'Backspace') { e.preventDefault(); press(k); }
+  }
+});
+
+/* =====================================================================
+   Crypto: your shared code → (encryption key, server access token)
+   The server never sees your code or your messages, only scrambled text.
+   ===================================================================== */
+const te = new TextEncoder(), td = new TextDecoder();
+const hex = u8 => [...u8].map(b => b.toString(16).padStart(2, '0')).join('');
+const b64 = u8 => btoa(String.fromCharCode(...u8));
+const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+
+async function derive(code){
+  const base = await crypto.subtle.importKey('raw', te.encode(code), 'PBKDF2', false, ['deriveBits']);
+  const bits = new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: te.encode(SALT), iterations: ITER, hash: 'SHA-256' }, base, 512));
+  const key = await crypto.subtle.importKey('raw', bits.slice(0, 32), 'AES-GCM', false, ['encrypt', 'decrypt']);
+  return { key, token: hex(bits.slice(32)) };
+}
+async function seal(obj){
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, S.key, te.encode(JSON.stringify(obj))));
+  return { iv: b64(iv), ct: b64(ct) };
+}
+async function open_(row){
+  try {
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(row.iv) }, S.key, unb64(row.ct));
+    return JSON.parse(td.decode(pt));
+  } catch { return null; }
+}
+
+/* =====================================================================
+   Session state — lives only in memory. Nothing is stored on the phone
+   except which emoji you picked (sessionStorage, gone when the tab closes).
+   ===================================================================== */
+const newState = () => ({ key: null, token: null, me: null, rows: [], plain: new Map(), poll: null, idle: null, busy: false, fp: '', more: false, fade: 0 });
+let S = newState();
+
+async function api(path, body){
+  const r = await fetch(path, {
+    method: body ? 'POST' : 'GET', cache: 'no-store', credentials: 'omit',
+    headers: { 'x-k': S.token, 'content-type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+}
+
+async function tryUnlock(code){
+  if (S.busy) return; S.busy = true;
+  try {
+    const d = await derive(code);
+    S.key = d.key; S.token = d.token;
+    const first = await api('/api/messages');
+    // success: wipe the calculator so the code isn't left on screen
+    expr = ''; justEvaluated = false; disp.textContent = '0'; exprEl.textContent = ''; fit();
+    S.rows = first.rows; S.fp = first.fp; S.more = first.more; S.fade = first.fade || 0;
+    let who = null; try { who = sessionStorage.getItem('w'); } catch {}
+    if (who && PEOPLE[who]) { S.me = who; enter(); }
+    else pickWho();
+  } catch {
+    S.key = null; S.token = null;     // wrong code → it was just a calculation
+  } finally { S.busy = false; }
+}
+
+function pickWho(){
+  const w = $('#who');
+  w.querySelectorAll('button').forEach(b => {
+    b.textContent = PEOPLE[b.dataset.who];
+    b.onclick = () => { S.me = b.dataset.who; try { sessionStorage.setItem('w', S.me); } catch {} w.classList.add('hidden'); enter(); };
+  });
+  w.classList.remove('hidden');
+}
+
+function enter(){
+  $('#calc').classList.add('hidden');
+  $('#tape').classList.remove('hidden');
+  render(true);
+  clearInterval(S.poll);
+  S.poll = setInterval(refresh, POLL_MS);
+  bumpIdle();
+}
+
+function lock(){
+  clearInterval(S.poll); clearTimeout(S.idle);
+  S = newState();
+  $('#paper').innerHTML = '';
+  $('#note').value = '';
+  $('#who').classList.add('hidden');
+  $('#tape').classList.add('hidden');
+  $('#calc').classList.remove('hidden');
+  expr = ''; disp.textContent = '0'; exprEl.textContent = ''; fit();
+}
+
+function bumpIdle(){
+  if (!S.key) return;
+  clearTimeout(S.idle);
+  S.idle = setTimeout(lock, IDLE_LOCK_MS);
+}
+
+// Lock the instant the tab/app is switched away from, or the screen turns off.
+document.addEventListener('visibilitychange', () => { if (document.hidden && S.key) lock(); });
+window.addEventListener('pagehide', () => { if (S.key) lock(); });
+['pointerdown', 'keydown', 'scroll'].forEach(ev => document.addEventListener(ev, bumpIdle, { passive: true, capture: true }));
+$('#back').onclick = lock;
+
+async function refresh(){
+  if (!S.key || document.hidden) return;
+  try {
+    const ids = S.rows.map(r => r.id);
+    const from = ids.length ? Math.min(...ids) : 0, after = ids.length ? Math.max(...ids) : 0;
+    const d = await api(`/api/messages?fp=${encodeURIComponent(S.fp)}&from=${from}&after=${after}`);
+    if (!S.key) return;
+    S.fade = d.fade || 0;
+    if (d.same) return;
+    S.fp = d.fp;
+    const old = new Map(S.rows.map(r => [r.id, r]));
+    S.rows = d.rows.map(r => r.iv ? r : old.has(r.id) ? { ...r, iv: old.get(r.id).iv, ct: old.get(r.id).ct } : null).filter(Boolean);
+    render(false);
+  }
+  catch (e) { if (String(e.message) === '404') lock(); }
+}
+
+/* =====================================================================
+   Rendering the tape
+   ===================================================================== */
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function timeStr(iso){
+  const d = new Date(iso), now = new Date();
+  const t = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return d.toDateString() === now.toDateString() ? t : d.toLocaleDateString([], { day: 'numeric', month: 'short' }) + ' ' + t;
+}
+function fate(row, mine){
+  if (row.saved) return '★ saved';
+  if (!row.read_at) return mine ? 'sent' : 'new';
+  if (!S.fade) return mine ? 'seen' : '';
+  const left = S.fade * 3600e3 - (Date.now() - new Date(row.read_at).getTime());
+  if (left <= 0) return 'fading';
+  const h = Math.floor(left / 3600e3);
+  const t = h >= 1 ? `fades in ${h}h` : `fades in ${Math.max(1, Math.round(left / 60e3))}m`;
+  return mine ? 'seen · ' + t : t;
+}
+
+let openId = null, renderChain = Promise.resolve();
+function render(forceBottom){ renderChain = renderChain.then(() => S.key && draw(forceBottom)).catch(() => {}); return renderChain; }
+async function draw(forceBottom){
+  const roll = $('#roll'), paper = $('#paper');
+  const nearBottom = roll.scrollHeight - roll.scrollTop - roll.clientHeight < 80;
+
+  const list = [];
+  for (const row of S.rows) {
+    if (!S.plain.has(row.id)) S.plain.set(row.id, await open_(row));
+    const m = S.plain.get(row.id);
+    if (m) list.push({ row, m });
+  }
+
+  let html = S.more ? `<button class="older">Show earlier</button>` : `<div class="stamp">· · · HISTORY · · ·</div>`;
+  if (!list.length) html += `<div class="empty">No history yet</div>`;
+  for (const { row, m } of list) {
+    const mine = m.from === S.me;
+    const fresh = !mine && !row.read_at;
+    html += `<div class="entry ${mine ? 'mine' : ''} ${fresh ? 'fresh' : ''} ${openId === row.id ? 'open' : ''}" data-id="${row.id}">
+      <div class="meta"><span>${PEOPLE[m.from] || '·'} ${timeStr(row.created_at)}</span><span>${fate(row, mine)}</span></div>
+      <div class="txt">${esc(m.text)}</div>
+      <div class="acts">
+        <button data-a="${row.saved ? 'unsave' : 'save'}">${row.saved ? '☆ Unsave' : '★ Save'}</button>
+        <button data-a="keep">Keep</button>
+        <button data-a="delete" class="danger">Delete</button>
+      </div></div>`;
+  }
+  html += `<div class="total"><span>TOTAL</span><span>${list.length}</span></div>`;
+  paper.innerHTML = html;
+
+  if (forceBottom || nearBottom) roll.scrollTop = roll.scrollHeight;
+
+  // Mark her/your incoming notes as read (starts their 24h clock) — only while actually on screen.
+  const unread = list.filter(x => x.m.from !== S.me && !x.row.read_at).map(x => x.row.id);
+  if (unread.length && !document.hidden) {
+    api('/api/action', { action: 'read', ids: unread }).then(() => {
+      // keep them bold for this view; the dot disappears on the next refresh
+    }).catch(() => {});
+  }
+}
+
+async function loadOlder(btn){
+  if (!S.rows.length) return;
+  btn.disabled = true; btn.textContent = '…';
+  try {
+    const d = await api(`/api/messages?before=${S.rows[0].id}`);
+    const roll = $('#roll'), h = roll.scrollHeight;
+    S.rows = d.rows.concat(S.rows); S.more = d.more;
+    await render(false);
+    roll.scrollTop += roll.scrollHeight - h;
+  } catch { btn.disabled = false; btn.textContent = 'Show earlier'; }
+}
+
+$('#paper').addEventListener('click', async e => {
+  if (e.target.closest('.older')) return loadOlder(e.target.closest('.older'));
+  const entry = e.target.closest('.entry'); if (!entry) return;
+  const id = Number(entry.dataset.id);
+  const a = e.target.closest('button')?.dataset.a;
+  if (!a) {
+    if (window.getSelection()?.toString()) return;  // allow copying text
+    openId = openId === id ? null : id;
+    document.querySelectorAll('.entry').forEach(el => el.classList.toggle('open', Number(el.dataset.id) === openId));
+    return;
+  }
+  openId = null;
+  if (a === 'keep') { entry.classList.remove('open'); return; }
+  if (a === 'delete' && !confirm('Delete this note for both of you?')) return;
+  try {
+    await api('/api/action', { action: a, ids: [id] });
+    if (a === 'delete') { S.rows = S.rows.filter(r => r.id !== id); S.plain.delete(id); }
+    else S.rows = S.rows.map(r => r.id === id ? { ...r, saved: a === 'save' } : r);
+    render(false);
+  } catch {}
+});
+
+/* =====================================================================
+   Sending
+   ===================================================================== */
+const note = $('#note'), sendBtn = $('#send');
+note.addEventListener('input', () => { note.style.height = 'auto'; note.style.height = Math.min(note.scrollHeight, 120) + 'px'; });
+note.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && window.matchMedia('(pointer:fine)').matches) { e.preventDefault(); send(); } });
+sendBtn.onclick = send;
+
+async function send(){
+  const text = note.value.trim();
+  if (!text || !S.key) return;
+  note.value = ''; note.style.height = 'auto'; note.focus();
+  try {
+    const sealed = await seal({ from: S.me, text });
+    const row = await api('/api/messages', sealed);
+    if (!S.key) return;
+    if (!S.rows.some(r => r.id === row.id)) S.rows.push({ id: row.id, iv: sealed.iv, ct: sealed.ct, created_at: row.created_at, read_at: null, saved: false });
+    render(true);
+  } catch {
+    // didn't go through — put the text back so it can be retried
+    if (S.key) note.value = text + (note.value ? '\n' + note.value : '');
+  }
+}
+</script>
+</body>
+</html>

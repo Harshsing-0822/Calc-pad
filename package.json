@@ -1,0 +1,11 @@
+{
+  "name": "calculator",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "hash": "node scripts/make-hash.mjs"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.0"
+  }
+}
